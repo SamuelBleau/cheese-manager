@@ -1,8 +1,9 @@
 pub mod core;
+pub mod ui;
 
 use gtk::gdk;
 use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Box, CssProvider, Label, Orientation, Paned};
+use gtk::{Application, CssProvider};
 
 const APP_ID: &str = "com.github.samuelbleau.cheese-manager";
 
@@ -13,60 +14,8 @@ fn main() {
         load_css();
     });
 
-    app.connect_activate(build_ui);
+    app.connect_activate(crate::ui::window::build_ui);
     app.run();
-}
-
-fn build_ui(app: &Application) {
-    let paned = Paned::builder()
-        .orientation(Orientation::Horizontal)
-        .position(200)
-        .build();
-
-    let sidebar = Box::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(5)
-        .css_classes(vec!["sidebar".to_string()])
-        .build();
-
-    let shortcuts = vec!["🐀 Home", "Root", "Projects"];
-    for name in shortcuts {
-        let button = gtk::Button::with_label(name);
-        button.child().unwrap().downcast::<Label>().unwrap().set_halign(gtk::Align::Start);
-        sidebar.append(&button);
-    }
-
-    let main_area = Box::builder()
-        .orientation(Orientation::Vertical)
-        .css_classes(vec!["main-area".to_string()])
-        .build();
-
-    let flowbox = gtk::FlowBox::new();
-    flowbox.set_valign(gtk::Align::Start);
-    flowbox.set_max_children_per_line(10);
-    flowbox.set_selection_mode(gtk::SelectionMode::None);
-
-    let fake_folders = vec!["󰉋 src", "target", "Cargo.toml", "flake.nix", ".git"];
-    for folder in fake_folders {
-        let btn = gtk::Button::with_label(folder);
-        btn.set_size_request(100, 100); 
-        flowbox.append(&btn);
-    }
-
-    main_area.append(&flowbox);
-
-    paned.set_start_child(Some(&sidebar));
-    paned.set_end_child(Some(&main_area));
-
-    let window = ApplicationWindow::builder()
-        .application(app)
-        .title("Cheese Manager")
-        .default_width(900)
-        .default_height(600)
-        .child(&paned)
-        .build();
-
-    window.present();
 }
 
 fn load_css() {

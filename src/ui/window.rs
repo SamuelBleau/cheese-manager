@@ -1,9 +1,56 @@
 use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Box, Label, Orientation, Paned, Button, FlowBox, SelectionMode, Align, ScrolledWindow, PolicyType};
-use std::path::Path;
+use gtk::{
+    Align, Application, ApplicationWindow, Box, Button, FlowBox, Label, Orientation, Paned,
+    PolicyType, ScrolledWindow, SelectionMode,
+};
+use std::path::{Path, PathBuf};
 
 use crate::core::fs::list_directory;
 use crate::core::node::NodeType;
+use std::rc::Rc;
+use std::cell::RefCell;
+
+fn load_directory_into_flowbox(flowbox: &FlowBox, current_path: Rc<RefCell<PathBuf>>, path: &Path) {
+    // clear existing children
+    while let Some(child) = flowbox.first_child() {
+        flowbox.remove(&child);
+    }
+
+    match list_directory(path) {
+        Ok(nodes) => {
+            for node in nodes {
+                let icon = match node.node_type {
+                    NodeType::Directory => "󰉋",
+                    NodeType::Archive => "󰗷",
+                    NodeType::Symlink => "󱅷",
+                    _ => "󰈙",
+                };
+
+                let label_text = format!("{} {}", icon, node.name);
+                let btn = Button::with_label(&label_text);
+                btn.set_size_request(100, 100);
+                btn.add_css_class("file-item");
+
+                // If it's a directory, make click navigate into it
+                if node.node_type == NodeType::Directory {
+                    let node_path = node.path.clone();
+                    let current_path_clone = current_path.clone();
+                    let flowbox_clone = flowbox.clone();
+                    btn.connect_clicked(move |_| {
+                        *current_path_clone.borrow_mut() = node_path.clone();
+                        load_directory_into_flowbox(&flowbox_clone, current_path_clone.clone(), &node_path);
+                    });
+                }
+
+                flowbox.append(&btn);
+            }
+        }
+        Err(_) => {
+            let error_label = Label::new(Some("Unable to read directory"));
+            flowbox.append(&error_label);
+        }
+    }
+}
 
 pub fn build_ui(app: &Application) {
     let paned = Paned::builder()
@@ -34,36 +81,13 @@ pub fn build_ui(app: &Application) {
     flowbox.set_max_children_per_line(10);
     flowbox.set_selection_mode(SelectionMode::None);
 
-    // Get the user's home directory (or fallback to root)
-    let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/".to_string());
-    let path = Path::new(&home_dir);
+    // Shared state: current path
+    let current_path = Rc::new(RefCell::new(PathBuf::from(
+        std::env::var("HOME").unwrap_or_else(|_| "/".to_string()),
+    )));
 
-    // Call the core module to read the directory
-    if let Ok(nodes) = list_directory(&path) {
-        for node in nodes {
-            // Pick an icon based on NodeType
-            let icon = match node.node_type {
-                NodeType::Directory => "󰉋",
-                NodeType::Archive => "󰗷",
-                NodeType::Symlink => "󱅷",
-                _ => "󰈙",
-            };
-            
-            // Format the button label
-            let label_text = format!("{} {}", icon, node.name);
-            let btn = Button::with_label(&label_text);
-            btn.set_size_request(100, 100);
-            
-            // Add custom class for styling later if nedded
-            btn.add_css_class("file-item");
-
-            flowbox.append(&btn);
-        }
-    } else {
-        // If we can't read the directory, show an error!
-        let error_label = Label::new(Some("Unable to read directory"));
-        flowbox.append(&error_label);
-    }
+    // initial populate
+    load_directory_into_flowbox(&flowbox, current_path.clone(), &current_path.borrow());
 
     let scrolled_window = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Never)

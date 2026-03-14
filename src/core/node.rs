@@ -31,10 +31,9 @@ impl FileNode {
             NodeType::Symlink
         } else if metadata.is_file() {
             // A simple check for archives, can be expanded later
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if matches!(ext, "zip" | "tar" | "gz" | "xz") {
-                    return NodeType::Archive;
-                }
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) 
+                && matches!(ext, "zip" | "tar" | "gz" | "xz") {
+                return NodeType::Archive;
             }
             NodeType::File
         } else {

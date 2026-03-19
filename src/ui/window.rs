@@ -1,126 +1,47 @@
 use gtk::prelude::*;
-use gtk::{
-    Align, Application, ApplicationWindow, Box, Button, FlowBox, Label, Orientation, Paned,
-    PolicyType, ScrolledWindow, SelectionMode,
-};
-use std::path::{Path, PathBuf};
+use gtk::{Application, ApplicationWindow, Box, Orientation, Paned};
 
-use crate::core::fs::list_directory;
-use crate::core::node::NodeType;
-use std::rc::Rc;
-use std::cell::RefCell;
-
-fn load_directory_into_flowbox(flowbox: &FlowBox, current_path: Rc<RefCell<PathBuf>>, path: &Path) {
-    // clear existing children
-    while let Some(child) = flowbox.first_child() {
-        flowbox.remove(&child);
-    }
-
-    if let Some(parent) = path.parent() {
-        let parent_path = parent.to_path_buf();
-        let current_path_clone = current_path.clone();
-        let flowbox_clone = flowbox.clone();
-
-        let btn = Button::with_label("󰁮 ..");
-        btn.set_size_request(100, 100);
-        btn.add_css_class("file-item");
-
-        btn.connect_clicked(move |_| {
-            current_path_clone.replace(parent_path.clone());
-            load_directory_into_flowbox(&flowbox_clone, current_path_clone.clone(), &parent_path);
-        });
-
-        flowbox.append(&btn);
-    }
-
-    match list_directory(path) {
-        Ok(nodes) => {
-            for node in nodes {
-                let icon = match node.node_type {
-                    NodeType::Directory => "󰉋",
-                    NodeType::Archive => "󰗷",
-                    NodeType::Symlink => "󱅷",
-                    _ => "󰈙",
-                };
-
-                let label_text = format!("{} {}", icon, node.name);
-                let btn = Button::with_label(&label_text);
-                btn.set_size_request(100, 100);
-                btn.add_css_class("file-item");
-
-                // If it's a directory, make click navigate into it
-                if node.node_type == NodeType::Directory {
-                    let node_path = node.path.clone();
-                    let current_path_clone = current_path.clone();
-                    let flowbox_clone = flowbox.clone();
-                    btn.connect_clicked(move |_| {
-                        current_path_clone.replace(node_path.clone());
-                        load_directory_into_flowbox(&flowbox_clone, current_path_clone.clone(), &node_path);
-                    });
-                }
-
-                flowbox.append(&btn);
-            }
-        }
-        Err(_) => {
-            let error_label = Label::new(Some("Unable to read directory"));
-            flowbox.append(&error_label);
-        }
-    }
-}
+use crate::core::config::{default_start_path, AppConfig};
+use crate::ui::file_view::build_file_view;
+use crate::ui::sidebar::build_sidebar;
 
 pub fn build_ui(app: &Application) {
-    let paned = Paned::builder()
-        .orientation(Orientation::Horizontal)
-        .position(200)
-        .build();
+    let config = AppConfig::load();
+    let shortcuts = config.valid_shortcuts();
+    let start_path = default_start_path();
 
-    let sidebar = Box::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(5)
-        .css_classes(vec!["sidebar".to_string()])
-        .build();
+    let (file_view, current_path) = build_file_view(&start_path);
 
-    let shortcuts = vec!["🐀 Home", "󰉋 Root", "󰈙 Projects"];
-    for name in shortcuts {
-        let button = Button::with_label(name);
-        button.child().unwrap().downcast::<Label>().unwrap().set_halign(Align::Start);
-        sidebar.append(&button);
-    }
+    // The sidebar needs a way to trigger a repopulate of the file view.
+    // We expose that by re-using the same `populate` logic via a closure
+    // that the sidebar can call with a new path.
+    //
+    // NOTE: Because GTK widgets are reference-counted, cloning `file_view`
+    // here is cheap — it's the same widget.
+    let file_view_ref = file_view.clone();
+    let on_navigate = move |path: &std::path::PathBuf| {
+        // Replace the child of the scrolled window to force a repopulate.
+        // The actual navigation state lives inside `current_path` already;
+        // we just need to tell `file_view` to refresh.
+        //
+        // Simplest approach: trigger a synthetic "navigate" by rebuilding the
+        // child. Since `build_file_view` owns its own FlowBox internally, we
+        // instead expose a separate refresh signal — see file_view::navigate_to.
+        crate::ui::file_view::navigate_to(&file_view_ref, path);
+    };
+
+    let sidebar = build_sidebar(&shortcuts, current_path, on_navigate);
 
     let main_area = Box::builder()
         .orientation(Orientation::Vertical)
         .css_classes(vec!["main-area".to_string()])
         .build();
+    main_area.append(&file_view);
 
-    let flowbox = FlowBox::new();
-    flowbox.set_valign(Align::Start);
-    flowbox.set_max_children_per_line(10);
-    flowbox.set_selection_mode(SelectionMode::None);
-
-    flowbox.connect_child_activated(|_, child| {
-        if let Some(w) = child.child() {
-            w.activate();
-        }
-    });
-
-    // Shared state: current path
-    let current_path = Rc::new(RefCell::new(PathBuf::from(
-        std::env::var("HOME").unwrap_or_else(|_| "/".to_string()),
-    )));
-
-    // initial populate
-    load_directory_into_flowbox(&flowbox, current_path.clone(), &current_path.borrow());
-
-    let scrolled_window = ScrolledWindow::builder()
-        .hscrollbar_policy(PolicyType::Never)
-        .vscrollbar_policy(PolicyType::Automatic)
-        .child(&flowbox)
-        .vexpand(true)
+    let paned = Paned::builder()
+        .orientation(Orientation::Horizontal)
+        .position(200)
         .build();
-
-    main_area.append(&scrolled_window);
-
     paned.set_start_child(Some(&sidebar));
     paned.set_end_child(Some(&main_area));
 

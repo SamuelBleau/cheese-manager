@@ -1,0 +1,34 @@
+window {
+    background-color: #1a1a24;
+    color: #EAEAEA;
+    font-family: "Hack Nerd Font", sans-serif;
+}
+
+.sidebar {
+    background-color: #252535;
+    border-right: 1px solid #51516a;
+    padding: 10px;
+}
+
+.main-area {
+    background-color: #1a1a24;
+    padding: 10px;
+}
+
+label {
+    color: #EAEAEA;
+}
+
+button {
+    background-image: none;
+    background-color: #252535;
+    color: #EAEAEA;
+    border-radius: 6px;
+    border: 1px solid #51516a;
+    transition: all 0.2s ease;
+}
+
+button:hover {
+    box-shadow: 0 0 10px rgba(155, 89, 182, 0.3);
+    border-color: #9b59b6;
+}

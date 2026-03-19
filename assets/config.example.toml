@@ -1,0 +1,19 @@
+# ~/.config/cheese-manager/config.toml
+
+[theme]
+# Optional: path to a custom CSS file that overrides the default theme.
+# If omitted or unreadable, the built-in theme is used.
+# css_file = "~/.config/cheese-manager/theme.css"
+
+[[shortcuts]]
+label = "🐀 Root"
+path = "/"
+
+[[shortcuts]]
+label = "Home"
+path = "~/"
+
+# This one will be hidden on machines where ~/Projects doesn't exist.
+[[shortcuts]]
+label = "Projects"
+path = "~/prog/projets_persos/"

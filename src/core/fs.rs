@@ -4,46 +4,31 @@ use std::path::Path;
 
 use super::node::{FileNode, NodeType};
 
-/// Reads a directory and returns a list of FileNode
+/// Reads a directory and returns a sorted list of [`FileNode`].
+///
+/// Directories come first, then entries are sorted case-insensitively by name.
+/// Hidden entries (dot-files) are included but flagged via [`FileNode::is_hidden`].
 pub fn list_directory(path: &Path) -> io::Result<Vec<FileNode>> {
-    let mut nodes = Vec::new();
+    let mut nodes = fs::read_dir(path)?
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            let metadata = entry.metadata().ok()?;
 
-    let entries = fs::read_dir(path)?;
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        
-        // Skip hidden files if we want, or at least flag them
-        let is_hidden = name.starts_with('.');
-
-        if let Ok(metadata) = entry.metadata() {
-            let node_type = FileNode::determine_type(&path, &metadata);
-            
-            nodes.push(FileNode {
-                name,
-                path,
-                node_type,
+            Some(FileNode {
+                node_type: FileNode::determine_type(&path, &metadata),
+                is_hidden: name.starts_with('.'),
                 size: metadata.len(),
                 modified: metadata.modified().ok(),
-                is_hidden,
-            });
-        }
-    }
+                name,
+                path,
+            })
+        })
+        .collect::<Vec<_>>();
 
-    // Sort: Directories first, then alphabetical
-    nodes.sort_by(|a, b| {
-        let a_is_dir = a.node_type == NodeType::Directory;
-        let b_is_dir = b.node_type == NodeType::Directory;
-        
-        if a_is_dir && !b_is_dir {
-            std::cmp::Ordering::Less
-        } else if !a_is_dir && b_is_dir {
-            std::cmp::Ordering::Greater
-        } else {
-            a.name.to_lowercase().cmp(&b.name.to_lowercase())
-        }
-    });
+    // Directories first, then alphabetical (case-insensitive).
+    nodes.sort_by_key(|n| (n.node_type != NodeType::Directory, n.name.to_lowercase()));
 
     Ok(nodes)
 }

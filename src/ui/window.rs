@@ -16,6 +16,23 @@ fn load_directory_into_flowbox(flowbox: &FlowBox, current_path: Rc<RefCell<PathB
         flowbox.remove(&child);
     }
 
+    if let Some(parent) = path.parent() {
+        let parent_path = parent.to_path_buf();
+        let current_path_clone = current_path.clone();
+        let flowbox_clone = flowbox.clone();
+
+        let btn = Button::with_label("󰁮 ..");
+        btn.set_size_request(100, 100);
+        btn.add_css_class("file-item");
+
+        btn.connect_clicked(move |_| {
+            current_path_clone.replace(parent_path.clone());
+            load_directory_into_flowbox(&flowbox_clone, current_path_clone.clone(), &parent_path);
+        });
+
+        flowbox.append(&btn);
+    }
+
     match list_directory(path) {
         Ok(nodes) => {
             for node in nodes {
@@ -37,7 +54,7 @@ fn load_directory_into_flowbox(flowbox: &FlowBox, current_path: Rc<RefCell<PathB
                     let current_path_clone = current_path.clone();
                     let flowbox_clone = flowbox.clone();
                     btn.connect_clicked(move |_| {
-                        *current_path_clone.borrow_mut() = node_path.clone();
+                        current_path_clone.replace(node_path.clone());
                         load_directory_into_flowbox(&flowbox_clone, current_path_clone.clone(), &node_path);
                     });
                 }
@@ -80,6 +97,12 @@ pub fn build_ui(app: &Application) {
     flowbox.set_valign(Align::Start);
     flowbox.set_max_children_per_line(10);
     flowbox.set_selection_mode(SelectionMode::None);
+
+    flowbox.connect_child_activated(|_, child| {
+        if let Some(w) = child.child() {
+            w.activate();
+        }
+    });
 
     // Shared state: current path
     let current_path = Rc::new(RefCell::new(PathBuf::from(
